@@ -1,0 +1,148 @@
+<%page expression_filter="h"/>
+<%!
+    import json
+    from django.urls import reverse
+    from six import text_type
+    from custom_programs.models import Program
+    from django.utils.translation import gettext as _
+    from openedx.core.djangolib.js_utils import js_escaped_string, dump_js_escaped_json
+    from custom_programs.models import ProgramEnrollment
+%>
+<%inherit file="../main.html" />
+<%
+    course_discovery_enabled = settings.FEATURES.get('ENABLE_COURSE_DISCOVERY')
+    active_programs = Program.get_active_programs()
+%>
+<%namespace name='static' file='../static_content.html'/>
+
+% if course_discovery_enabled:
+<%block name="header_extras">
+  % for template_name in ["course_card", "filter_bar", "filter", "facet", "facet_option"]:
+  <script type="text/template" id="${template_name}-tpl">
+      <%static:include path="discovery/${template_name}.underscore" />
+  </script>
+  % endfor
+  <%static:require_module module_name="js/discovery/discovery_factory" class_name="DiscoveryFactory">
+    DiscoveryFactory(
+      ${course_discovery_meanings | n, dump_js_escaped_json},
+      getParameterByName('search_query'),
+      "${user_language | n, js_escaped_string}",
+      "${user_timezone | n, js_escaped_string}"
+    );
+  </%static:require_module>
+</%block>
+% endif
+
+<%block name="pagetitle">${_("Courses")}</%block>
+<%block name="headextra">
+    <link rel="stylesheet" type="text/css" href="${static.url('custom_css/browse-courses.css')}">
+</%block>
+<main id="main" aria-label="Content" tabindex="-1">
+    <section class="find-courses">
+        <section class="courses-container">
+            % if course_discovery_enabled:
+                <div id="discovery-form" role="search" aria-label="course" class="wrapper-search-context">
+                    <div id="discovery-message" class="search-status-label"></div>
+                    <form class="wrapper-search-input">
+                        <label for="discovery-input" class="sr">${_('Search for a course')}</label>
+                        <input id="discovery-input" class="discovery-input" placeholder="${_('Search for a course')}" type="text"/>
+                        <button type="submit" class="button postfix discovery-submit" title="${_('Search')}">
+                            <span class="icon fa fa-search" aria-hidden="true"></span>
+                            <div aria-live="polite" aria-relevant="all">
+                                <div id="loading-indicator" class="loading-spinner hidden">
+                                    <span class="icon fa fa-spinner fa-spin" aria-hidden="true"></span>
+                                    <span class="sr">${_('Loading')}</span>
+                                </div>
+                            </div>
+                        </button>
+                    </form>
+                </div>
+                <div id="filter-bar" class="filters hide-phone is-collapsed">
+                </div>
+            % endif
+
+            <div class="courses${'' if course_discovery_enabled else ' no-course-discovery'}" role="region" aria-label="${_('List of Courses')}">
+                % if active_programs:
+                    <div class="program-listing-items">
+                        <div class="title-section">
+                            <h2>المسارات</h2>
+                            <p>
+                                
+                                المسارات مصممة لمختلف الفئات، وتزوّد المشاركين بالمعرفة والمهارات اللازمة لدعم دمج الأشخاص ذوي الإعاقة في بيئة العمل. 
+                            
+                            </p>
+                        </div>
+                        <div class="program-list">
+                            % for program in active_programs:
+                                <div class="program-item">
+                                    <div class="item-content left-bar">
+                                        <a href="${reverse('custom_programs:program_about', args=[text_type(program.id)])}">
+                                            <img src="${program.card.url}" alt="${program.name} Image" />
+                                        </a>  
+                                    </div>
+                                    <div class="item-content right-bar">
+                                        <div class="title-top">
+                                            <h2>${program.name}</h2>
+                                            <div class="course-time">
+                                                <span class="course-duration">'${program.duration if program.duration else ''}</span>
+                                                <img src="${static.url('images/time.png')}" alt="Course Duration" class="clock-icon">
+                                            </div>
+                                        </div>
+
+                                        <div class="item-content-image">
+                                            <a href="${reverse('custom_programs:program_about', args=[text_type(program.id)])}">
+                                                <img src="${program.card.url}" alt="${program.name} Image" />
+                                            </a>  
+                                        </div>
+
+
+                                        <p class="short-desc">${program.short_description}</p>
+                                        <div class="content-div">
+                                            <ul class="program-courses">
+                                                % for course in program.courses.all():
+                                                    <li>
+                                                        <span>
+                                                            <a href="${reverse('about_course', args=[text_type(course.course_key)])}">${course.name}</a>
+                                                        </span>
+                                                    </li>
+                                                % endfor
+                                            </ul>
+                                            % if ProgramEnrollment.is_enrolled(request.user, program.id):
+                                                <a class="program-btn" href="${reverse('custom_programs:program_about', args=[text_type(program.id)])}">انت مسجل في المسار</a>
+                                            % else:
+                                                <a class="program-btn" href="${reverse('custom_programs:program_about', args=[text_type(program.id)])}">التسجيل في المسار</a>
+                                            % endif
+                                        </div>
+                                    </div>
+                                </div>
+                            % endfor
+                        </div>
+                    </div>
+                % endif
+                <div class="title-section">
+                    <h2>الدورات التدريبية</h2>
+                    <p>
+                        
+                        الدورات تعلّم مفاهيم أساسية لكل من يسعى لدعم الشمولية وتمكين الأشخاص ذوي الإعاقة ضمن بيئة العمل. 
+                    
+                    </p>
+                </div>
+                <ul class="courses-listing courses-list">
+                    %for course in courses:
+                        <li class="courses-listing-item">
+                            <%include file="../course.html" args="course=course" />
+                        </li>
+                    %endfor
+                </ul>
+            </div>
+
+            % if course_discovery_enabled:
+                <aside aria-label="${_('Refine Your Search')}" class="search-facets phone-menu">
+                    <h2 class="header-search-facets">${_('Refine Your Search')}</h2>
+                    <section class="search-facets-lists">
+                    </section>
+                </aside>
+            % endif
+        </section>
+    </section>
+</main>
